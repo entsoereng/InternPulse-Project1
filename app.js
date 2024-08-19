@@ -40,3 +40,30 @@ app.get('/users/:id', (req, res) => {
     }
     res.json(user);
 });
+
+// Update user information by name
+app.put('/users', (req, res) => {
+    const { name } = req.query;
+    const { newName } = req.body;
+
+    if (!name || !newName) {
+        return res.status(400).json({ error: 'Old name and new name are required' })
+    }
+    user.name = newName;
+    res.json(user);
+});
+
+// Update user information by ID
+app.put('/user/:id', (req, res) => {
+    const { id } = req.params;
+    const { newName } = req.body;
+    if (!newName) {
+        return res.status(400).json(error: 'New name is required')
+    }
+    const user = user.find(user => user.id === parseInt(id));
+    if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+    user.name = newName;
+    res.json(user);
+});

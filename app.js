@@ -1,25 +1,27 @@
+require('dotenv').config();
 const express = require('express');
-const mongoose = require('mongoose')
+const mongoose = require('mongoose');
+const User = require('./userModels');
 const app = express();
-const port = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
 // Connect to MongoDB
-mongoose.connect('MONGO_CONNECTION_TOKEN', {
-    useNewUrlParser: true,
-    useUnifiesdTopology: true
-}).then(() => {
-    console.log('Connected to MongoDB');
-}).catch(error => {
-    console.log('Error connecting to MongoDB:', error);
-});
+const mongoUri = process.env.MONGODB_URI;
+if (!mongoUri) {
+    throw new Error("MONGODB_URI is not defined in the environment variables");
+}
 
-//Create a new user
+mongoose.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => console.log('Connected to MongoDB'))
+    .catch(err => console.error('Error connecting to MongoDB:', err));
+
+//Create a new user pass:n3VrKsb6ceXyq480 url:
 app.post('/users', async (req, res) => {
     const { name } = req.body;
     if (!name) {
-        return res.status(400).json({ error: 'Namee is required' })
+        return res.status(400).json({ error: 'Name is required' })
     }
     try {
         const newUser = new User({ name });
@@ -27,7 +29,7 @@ app.post('/users', async (req, res) => {
         res.status(201).json({ newUser });
     } catch (error) {
         if (error.code === 11000) {
-            res.status(400).json({ error: 'User already exists' });
+            res.status(400).json({ error: 'User already exist' });
         } else {
             res.status(500).json({ error: 'Internal server error' });
         }
@@ -92,7 +94,7 @@ app.put('/user/:id', async (req, res) => {
         return res.status(400).json({ error: 'New name is required' })
     }
     try {
-        const user = await User.findByIdAndUpdate(id, { name: nweName }, { new: true });
+        const user = await User.findByIdAndUpdate(id, { name: newName }, { new: true });
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -104,7 +106,7 @@ app.put('/user/:id', async (req, res) => {
 
 // Delete a user by name
 app.delete('/users', async (req, res) => {
-    const { name } = req.params;
+    const { name } = req.query;
     if (!name) {
         return res.status(400).json({ error: 'Name is required' });
     }
@@ -133,6 +135,8 @@ app.delete('/users/:id', async (req, res) => {
     }
 });
 
-app.listen(port, () => {
-    console.log(`User management API running at http://localhost:${port}`);
-})
+app.listen(PORT, () => {
+    console.log(`User management API running at http://localhost:${PORT}`);
+});
+
+module.exports = app;

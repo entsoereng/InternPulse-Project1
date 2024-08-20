@@ -1,98 +1,197 @@
 const request = require('supertest');
+const express = require('express');
 const mongoose = require('mongoose');
-const app = require('../app');
-const User = require('../userModels');
+const { MongoMemoryServer } = require('mongodb-memory-server');
+const { expect } = require('@jest/globals');
+const app = express();
+const userRouters = require('./routes/users');
 
+app.use(express.json());
+app.use('/users', userRouters);
+
+let mongoServer;
+
+// Setup MongoDB in-memory server before running tests
 beforeAll(async () => {
-    const mongoUri = process.env.MONGODB_URI;
+    mongoServer = await MongoMemoryServer.create();
+    const mongoUri = mongoServer.getUri();
+
     await mongoose.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true });
 });
 
+// Clean up after tests
 afterAll(async () => {
-    await mongoose.connection.close();
+    await mongoose.disconnect();
+    await mongoServer.stop();
 });
 
-afterEach(async () => {
-    await User.deleteMany({});
-});
+describe('User Routes', () => {
+    // Tests for POST /users
+    describe('POST /users', () => {
+        it('should create a new user', async () => {
+            const res = await request(app)
+                .post('/users')
+                .send({ name: 'John Doe' });
 
-describe('User API tests', () => {
-    test('should create a new user', async () => {
-        const response = await request(app)
-            .post('/users')
-            .send({ name: 'Mokonyana Ntsoereng' });
+            expect(res.status).toBe(201);
+            expect(res.body).toHaveProperty('name', 'John Doe');
+        });
 
-        expect(response.status).toBe(201);
-        expect(response.body.newUser).toHaveProperty('_id');
-        expect(response.body.newUser.name).toBe('Mokonyana Ntsoereng');
+        it('should return 400 if name is missing', async () => {
+            const res = await request(app)
+                .post('/users')
+                .send({});
+
+            expect(res.status).toBe(400);
+            expect(res.body).toHaveProperty('message', 'User name is required');
+        });
     });
 
-    test('should retrieve user information by name', async () => {
-        const user = new User({ name: 'Mokonyana Ntsoereng' });
-        await user.save();
+    // Tests for GET /users
+    describe('GET /users', () => {
+        beforeEach(async () => {
+            await request(app).post('/users').send({ name: 'Alice' });
+            await request(app).post('/users').send({ name: 'Bob' });
+        });
 
-        const response = await request(app)
-            .get('/users')
-            .query({ name: 'Mokonyana Ntsoereng' });
+        it('should retrieve and sort users by name', async () => {
+            const res = await request(app)
+                .get('/users')
+                .query({ sortBy: 'name', sortOrder: 'asc' });
 
-        expect(response.status).toBe(200);
-        expect(response.body.name).toBe('Mokonyana Ntsoereng');
+            expect(res.status).toBe(200);
+            expect(res.body[0]).toHaveProperty('name', 'Alice');
+            expect(res.body[1]).toHaveProperty('name', 'Bob');
+        });
+
+        it('should return 404 if no users are found', async () => {
+            await request(app).delete('/users').query({ name: 'Alice' });
+            await request(app).delete('/users').query({ name: 'Bob' });
+
+            const res = await request(app).get('/users');
+            expect(res.status).toBe(404);
+            expect(res.body).toHaveProperty('message', 'No users found');
+        });
     });
 
-    test('should retrieve user information by ID', async () => {
-        const user = new User({ name: 'Emmanuel' });
-        await user.save();
+    // Tests for GET /users/:id
+    describe('GET /users/:id', () => {
+        let userId;
 
-        const response = await request(app)
-            .get(`/users/${user._id}`);
+        beforeEach(async () => {
+            const res = await request(app).post('/users').send({ name: 'Charlie' });
+            userId = res.body._id;
+        });
 
-        expect(response.status).toBe(200);
-        expect(response.body.name).toBe('Emmanuel');
+        it('should retrieve user by ID', async () => {
+            const res = await request(app).get(`/users/${userId}`);
+            expect(res.status).toBe(200);
+            expect(res.body).toHaveProperty('name', 'Charlie');
+        });
+
+        it('should return 404 if user not found', async () => {
+            const res = await request(app).get('/users/invalidId');
+            expect(res.status).toBe(404);
+            expect(res.body).toHaveProperty('message', 'User not found');
+        });
     });
 
-    test('should update user information by name', async () => {
-        const user = new User({ name: 'Phoka' });
-        await user.save();
+    // Tests for PUT /users
+    describe('PUT /users', () => {
+        let userId;
 
-        const response = await request(app)
-            .put('/users')
-            .query({ name: 'Phoka' })
-            .send({ newName: 'Letlotlo' });
+        beforeEach(async () => {
+            const res = await request(app).post('/users').send({ name: 'Dave' });
+            userId = res.body._id;
+        });
 
-        expect(response.status).toBe(200);
-        expect(response.body.name).toBe('Letlotlo');
+        it('should update user by name', async () => {
+            const res = await request(app)
+                .put('/users')
+                .query({ oldName: 'Dave' })
+                .send({ name: 'David' });
+
+            expect(res.status).toBe(200);
+            expect(res.body).toHaveProperty('name', 'David');
+        });
+
+        it('should return 400 if old name or new name is missing', async () => {
+            const res = await request(app)
+                .put('/users')
+                .query({ oldName: 'Dave' })
+                .send({});
+
+            expect(res.status).toBe(400);
+            expect(res.body).toHaveProperty('message', 'Old name and new name are required');
+        });
     });
 
-    test('should update user information by ID', async () => {
-        const user = new User({ name: 'Leseli' });
-        await user.save();
+    // Tests for PUT /users/:id
+    describe('PUT /users/:id', () => {
+        let userId;
 
-        const response = await request(app)
-            .put(`/users/${user._id}`)
-            .send({ newName: 'Lesedi' });
+        beforeEach(async () => {
+            const res = await request(app).post('/users').send({ name: 'Emma' });
+            userId = res.body._id;
+        });
 
-        expect(response.status).toBe(200);
-        expect(response.body.name).toBe('Lesedi');
+        it('should update user by ID', async () => {
+            const res = await request(app)
+                .put(`/users/${userId}`)
+                .send({ name: 'Emily' });
+
+            expect(res.status).toBe(200);
+            expect(res.body).toHaveProperty('name', 'Emily');
+        });
+
+        it('should return 400 if new name is missing', async () => {
+            const res = await request(app)
+                .put(`/users/${userId}`)
+                .send({});
+
+            expect(res.status).toBe(400);
+            expect(res.body).toHaveProperty('message', 'New name is required');
+        });
     });
 
-    test('should delete a user by name', async () => {
-        const user = new User({ name: 'Mpine' });
-        await user.save();
+    // Tests for DELETE /users
+    describe('DELETE /users', () => {
+        beforeEach(async () => {
+            await request(app).post('/users').send({ name: 'Frank' });
+        });
 
-        const response = await request(app)
-            .delete('/users')
-            .query({ name: 'Mpine' });
+        it('should delete user by name', async () => {
+            const res = await request(app).delete('/users').query({ name: 'Frank' });
+            expect(res.status).toBe(200);
+            expect(res.body).toHaveProperty('message', 'User deleted successfully');
+        });
 
-        expect(response.status).toBe(204);
+        it('should return 400 if user name is missing', async () => {
+            const res = await request(app).delete('/users').send({});
+            expect(res.status).toBe(400);
+            expect(res.body).toHaveProperty('message', 'User name is required');
+        });
     });
 
-    test('should delete a user by ID', async () => {
-        const user = new User({ name: 'Lieketso' });
-        await user.save();
+    // Tests for DELETE /users/:id
+    describe('DELETE /users/:id', () => {
+        let userId;
 
-        const response = await request(app)
-            .delete(`/users/${user._id}`);
+        beforeEach(async () => {
+            const res = await request(app).post('/users').send({ name: 'Grace' });
+            userId = res.body._id;
+        });
 
-        expect(response.status).toBe(204);
+        it('should delete user by ID', async () => {
+            const res = await request(app).delete(`/users/${userId}`);
+            expect(res.status).toBe(200);
+            expect(res.body).toHaveProperty('message', 'User deleted successfully');
+        });
+
+        it('should return 404 if user not found', async () => {
+            const res = await request(app).delete('/users/invalidId');
+            expect(res.status).toBe(404);
+            expect(res.body).toHaveProperty('message', 'User not found');
+        });
     });
 });

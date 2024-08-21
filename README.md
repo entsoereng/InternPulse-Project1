@@ -293,8 +293,8 @@ http://localhost:3000
    Clone your repository to your local machine if you haven’t already:
 
    ```bash
-   git clone https://github.com/yourusername/your-repository.git
-   cd your-repository
+   git clone git@github.com:entsoereng/InternPulse-Project1.git
+   cd user-management-system
    ```
 
 2. **Install Dependencies**

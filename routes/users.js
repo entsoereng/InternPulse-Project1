@@ -43,7 +43,7 @@ router.get('/', async (req, res) => {
     }
 });
 
-// Retrieve user information by name
+// Retrieve user information by ID
 router.get('/:id', async (req, res) => {
     try {
         const user = await User.findById(req.params.id);

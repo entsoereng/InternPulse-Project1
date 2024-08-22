@@ -1,29 +1,35 @@
+const { MongoMemoryServer } = require('mongodb-memory-server');
+const mongoose = require('mongoose');
 const request = require('supertest');
 const express = require('express');
-const mongoose = require('mongoose');
-const { MongoMemoryServer } = require('mongodb-memory-server');
-const { expect } = require('@jest/globals');
-const app = express();
-const userRouters = require('./routes/users');
+const userRouters = require('../routes/users');  // Adjust the path accordingly
 
+const app = express();
 app.use(express.json());
 app.use('/users', userRouters);
 
+jest.setTimeout(60000);
+
 let mongoServer;
 
-// Setup MongoDB in-memory server before running tests
 beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = await MongoMemoryServer.create({
+        instance: {
+            port: 27017,
+            timeoutMS: 30000,
+        },
+    });
     const mongoUri = mongoServer.getUri();
-
     await mongoose.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true });
 });
 
-// Clean up after tests
 afterAll(async () => {
     await mongoose.disconnect();
-    await mongoServer.stop();
+    if (mongoServer) {
+        await mongoServer.stop();
+    }
 });
+
 
 describe('User Routes', () => {
     // Tests for POST /users
